@@ -22,9 +22,35 @@ function returnError(PDOException $pdoex): void
     exit;
 }
 
+// Luodaan uusi käyttäjä
+function createUser(PDO $db) {
+    // Luetaan muuttujat mahdollisista inputeista ja sanitoidaan
+    $input = json_decode(file_get_contents('php://input'));
+    $username = filter_var($input->username, FILTER_SANITIZE_STRING);
+    $password = filter_var($input->password, FILTER_SANITIZE_STRING);
+
+    try {
+        // Hashataan salasana
+        $hash_pw = password_hash($password, PASSWORD_DEFAULT);
+        // SQL-komento, arvot parametreina
+        $sql = "INSERT IGNORE INTO user VALUES (?,?)";
+        // Valmistellaan komento ja bindataan arvot
+        $prepare = $db->prepare($sql);
+        $prepare->bindValue(':username', $username, PDO::PARAM_STR);
+        $prepare->bindValue(':password', $password, PDO::PARAM_STR);
+        // Tiedot tietokantaan
+        $prepare->execute(array($username, $hash_pw));
+        header('HTTP/1.1 200 OK');
+        echo "Successful registration!";
+        // Catch mahdollisten virhetilanteiden varalta
+    } catch (PDOException $pdoex) {
+        returnError($pdoex);
+    }
+}
+
 // Tarkastetaan käyttäjän tiedot
 function checkUser(PDO $db, $username, $password)
-{
+{   // Sanitoidaan
     $username = filter_var($username, FILTER_SANITIZE_STRING);
     $password = filter_var($password, FILTER_SANITIZE_STRING);
 
@@ -60,7 +86,6 @@ function addInfo(PDO $db, $username)
 {
     // Luetaan muuttujat mahdollisista inputeista ja sanitoidaan
     $input = json_decode(file_get_contents('php://input'));
-    $username = filter_var($username, FILTER_SANITIZE_STRING);
     $firstname = filter_var($input->firstname, FILTER_SANITIZE_STRING);
     $lastname = filter_var($input->lastname, FILTER_SANITIZE_STRING);
     $street_address = filter_var($input->street_address, FILTER_SANITIZE_STRING);
@@ -69,12 +94,8 @@ function addInfo(PDO $db, $username)
     $interests = filter_var($input->interests, FILTER_SANITIZE_STRING);
 
     try {
-        // Avataan tietokantayhteys
-        $db = openDb();
         // SQL-komento, arvot parametreina
-        $sql = "INSERT IGNORE INTO user_add_info (username, firstname, lastname, street_address,
-        town, placeofwork, interests)
-        VALUES (?,?,?,?,?,?,?)";
+        $sql = "INSERT IGNORE INTO user_add_info VALUES (?,?,?,?,?,?,?)";
         // Valmistellaan komento ja bindataan arvot
         $prepare = $db->prepare($sql);
         $prepare->bindValue(':username', $username, PDO::PARAM_STR);
@@ -85,13 +106,32 @@ function addInfo(PDO $db, $username)
         $prepare->bindValue(':placeofwork', $placeofwork, PDO::PARAM_STR);
         $prepare->bindValue(':interests', $interests, PDO::PARAM_STR);
         // Tiedot tietokantaan
-        $prepare->execute();
-        $data = array('username' => $username, 'firstname' => $firstname,
-            'lastname' => $lastname, 'street_address' => $street_address,
-            'town' => $town, 'placeofwork' => $placeofwork, 'interests' => $interests
-        );
-        return $data;
+        $prepare->execute(array(
+            $username, $firstname,
+            $lastname, $street_address, $town, $placeofwork, $interests
+        ));
+        echo "Data successfully inserted!";
         // Catch mahdollisten virhetilanteiden varalta
+    } catch (PDOException $pdoex) {
+        returnError($pdoex);
+    }
+}
+
+// Tietojen näyttäminen
+function showPersonalData(PDO $db, $username)
+{
+    // Sanitoidaan
+    $username = filter_var($username, FILTER_SANITIZE_STRING);
+
+    try {
+        // SQL-komento, arvo parametrina
+        $sql = "SELECT * FROM user_add_info
+        WHERE username=?";
+        $prepare = $db->prepare($sql);
+        $prepare->execute(array($username));
+        $results = $prepare->fetchAll(PDO::FETCH_ASSOC);
+        header('HTTP/1.1 200 OK');
+        echo json_encode($results);
     } catch (PDOException $pdoex) {
         returnError($pdoex);
     }
